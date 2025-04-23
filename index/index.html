@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>.aladin ビューア</title>
+  <style>
+    body { font-family: monospace; background: #111; color: #0f0; padding: 1em; }
+    pre { white-space: pre-wrap; word-break: break-word; background: #000; padding: 1em; }
+    img, video { max-width: 100%; margin-top: 1em; }
+  </style>
+</head>
+<body>
+  <h2>.aladin / .bytes ファイルビューア</h2>
+  <input type="file" id="fileInput">
+  <div id="output"></div>
+
+  <script>
+    const output = document.getElementById('output');
+
+    document.getElementById('fileInput').addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const buffer = await file.arrayBuffer();
+      const bytes = new Uint8Array(buffer);
+      const text = new TextDecoder("utf-8").decode(buffer);
+
+      // リセット
+      output.innerHTML = "";
+
+      // JSON判定
+      try {
+        const json = JSON.parse(text);
+        const pre = document.createElement('pre');
+        pre.textContent = JSON.stringify(json, null, 2);
+        output.appendChild(pre);
+        return;
+      } catch (e) {}
+
+      // PNG/JPEG/WebP/MP4判定
+      const magic = bytes.slice(0, 4).join(" ");
+      if (bytes[0] === 0x89 && bytes[1] === 0x50) {
+        const url = URL.createObjectURL(new Blob([buffer], { type: "image/png" }));
+        output.innerHTML = `<img src="${url}">`;
+        return;
+      } else if (bytes[0] === 0xFF && bytes[1] === 0xD8) {
+        const url = URL.createObjectURL(new Blob([buffer], { type: "image/jpeg" }));
+        output.innerHTML = `<img src="${url}">`;
+        return;
+      } else if (bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46) {
+        const url = URL.createObjectURL(new Blob([buffer], { type: "image/webp" }));
+        output.innerHTML = `<img src="${url}">`;
+        return;
+      } else if (bytes[4] === 0x66 && bytes[5] === 0x74 && bytes[6] === 0x79 && bytes[7] === 0x70) {
+        const url = URL.createObjectURL(new Blob([buffer], { type: "video/mp4" }));
+        output.innerHTML = `<video src="${url}" controls></video>`;
+        return;
+      }
+
+      // ヘッダが 'ALI2' なら .aladin ファイルと判定
+      if (text.includes("ALI2")) {
+        const hex = [...bytes].map(b => b.toString(16).padStart(2, "0")).join(" ");
+        const pre = document.createElement("pre");
+        pre.textContent = hex.match(/.{1,48}/g).join("\n");
+        output.appendChild(pre);
+        return;
+      }
+
+      // テキストかどうか判定（英数字率高ければテキストとみなす）
+      const asciiRate = [...bytes].filter(b => b >= 32 && b < 127).length / bytes.length;
+      if (asciiRate > 0.85) {
+        const pre = document.createElement("pre");
+        pre.textContent = text;
+        output.appendChild(pre);
+        return;
+      }
+
+      // どれにも当てはまらない → HEXダンプ
+      const hex = [...bytes].map(b => b.toString(16).padStart(2, "0")).join(" ");
+      const pre = document.createElement("pre");
+      pre.textContent = hex.match(/.{1,48}/g).join("\n");
+      output.appendChild(pre);
+    });
+  </script>
+</body>
+</html>
